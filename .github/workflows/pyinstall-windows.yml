@@ -29,5 +29,5 @@ jobs:
       - name: Upload EXE
         uses: actions/upload-artifact@v4
         with:
-          name: selenium_bot_exe
-          path: dist/selenium_bot.exe  # Path to the generated EXE
+          name: autotb_exe
+          path: dist/tl_worker.exe  # Path to the generated EXE
