@@ -3,31 +3,31 @@ on: [push]  # Runs on every push (customize as needed)
 
 jobs:
   build:
-      runs-on: windows-latest  # Windows runner
-          steps:
-                # 1. Checkout code
-                      - uses: actions/checkout@v4
+    runs-on: windows-latest  # Windows runner
+    steps:
+      # 1. Checkout code
+      - uses: actions/checkout@v4
 
-                            # 2. Set up Python 3.12
-                                  - name: Set up Python 3.12
-                                          uses: actions/setup-python@v4
-                                                  with:
-                                                            python-version: '3.12'
+      # 2. Set up Python 3.12
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
 
-                                                                  # 3. Install dependencies
-                                                                        - name: Install dependencies
-                                                                                run: |
-                                                                                          python -m pip install --upgrade pip
-                                                                                                    pip install pyinstaller selenium_stealth selenium
-                                                                                                    
-                                                                                                          # 4. Run PyInstaller
-                                                                                                                - name: Build EXE
-                                                                                                                        run: |
-                                                                                                                                  python -m PyInstaller --collect-all selenium_stealth --onefile selenium_bot.py
-                                                                                                                                  
-                                                                                                                                        # 5. Upload the EXE as an artifact (for download)
-                                                                                                                                              - name: Upload EXE
-                                                                                                                                                      uses: actions/upload-artifact@v3
-                                                                                                                                                              with:
-                                                                                                                                                                        name: selenium_bot_exe
-                                                                                                                                                                                  path: dist/selenium_bot.exe  # Path to the generated EXE
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller selenium_stealth selenium
+
+      # 4. Run PyInstaller
+      - name: Build EXE
+        run: |
+          python -m PyInstaller --collect-all selenium_stealth --onefile selenium_bot.py
+
+      # 5. Upload the EXE as an artifact (for download)
+      - name: Upload EXE
+        uses: actions/upload-artifact@v3
+        with:
+          name: selenium_bot_exe
+          path: dist/selenium_bot.exe  # Path to the generated EXE
