@@ -18,12 +18,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller selenium_stealth selenium
+          pip install pyinstaller selenium_stealth selenium webdriver-manager
 
       # 4. Run PyInstaller
       - name: Build EXE
         run: |
-          python -m PyInstaller --collect-all selenium_stealth --onefile selenium_bot.py
+          python -m PyInstaller --collect-all selenium_stealth --onefile tl_worker.py
 
       # 5. Upload the EXE as an artifact (for download)
       - name: Upload EXE
