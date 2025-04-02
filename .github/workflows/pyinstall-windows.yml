@@ -27,7 +27,7 @@ jobs:
 
       # 5. Upload the EXE as an artifact (for download)
       - name: Upload EXE
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: selenium_bot_exe
           path: dist/selenium_bot.exe  # Path to the generated EXE
