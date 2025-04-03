@@ -36,7 +36,7 @@ def chrome_service() -> tuple:
         print("Unsupported operating system")
 
     service = None
-    if platform.processor()=='x86_64':
+    if platform.machine() in ('x86_64','amd64', 'x64'):
         driver_path = ChromeDriverManager().install()
         driver_root_path = '/'.join(driver_path.split('/')[:-3])
         driver_versions = ost.listdir(driver_root_path)
@@ -47,7 +47,7 @@ def chrome_service() -> tuple:
         service = c_service(f"{driver_root_path}/{selected_driver_version}/{'/'.join(driver_path.split('/')[-2:])}")
 
     else:
-        print(f"your {platform.processor()} is not supported by webdriver manager please install chromedriver and provide it's path")
+        print(f"your {platform.machine()} machine is not supported by webdriver manager please install chromedriver and provide it's path")
         service = c_service('/usr/local/bin/chromedriver')
 
     return service, profile_path
