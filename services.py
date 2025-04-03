@@ -36,7 +36,7 @@ def chrome_service() -> tuple:
         print("Unsupported operating system")
 
     service = None
-    if platform.machine() in ('x86_64','amd64', 'x64'):
+    if platform.machine().lower() in ('x86_64','amd64', 'x64'):
         driver_path = ChromeDriverManager().install()
         driver_root_path = '/'.join(driver_path.split('/')[:-3])
         driver_versions = ost.listdir(driver_root_path)
