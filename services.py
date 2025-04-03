@@ -47,6 +47,7 @@ def chrome_service() -> tuple:
         service = c_service(f"{driver_root_path}/{selected_driver_version}/{'/'.join(driver_path.split('/')[-2:])}")
 
     else:
+        print(f"your {platform.processor()} is not supported by webdriver manager please install chromedriver and provide it's path")
         service = c_service('/usr/local/bin/chromedriver')
 
     return service, profile_path
