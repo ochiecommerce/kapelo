@@ -28,6 +28,10 @@ jobs:
         run: |
           python -m PyInstaller --collect-all selenium_stealth --onefile ke_server.py
 
+      - name: Test build
+        run: |
+          .\dist\tl_worker.exe 
+
       # 5. Upload the EXE as an artifacts (for download)
       - name: Upload tl_worker
         uses: actions/upload-artifact@v4
