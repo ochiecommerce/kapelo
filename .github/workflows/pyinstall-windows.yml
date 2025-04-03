@@ -24,9 +24,9 @@ jobs:
       - name: Build tl_worker EXE
         run: |
           python -m PyInstaller --collect-all selenium_stealth --onefile tl_worker.py
-      - name: Build ke_server EXE
-        run: |
-          python -m PyInstaller --collect-all selenium_stealth --onefile ke_server.py
+      #- name: Build ke_server EXE
+      #  run: |
+      #    python -m PyInstaller --collect-all selenium_stealth --onefile ke_server.py
 
       # 5. Upload the EXE as an artifacts (for download)
       - name: Upload tl_worker
@@ -35,8 +35,8 @@ jobs:
           name: autotb_exe
           path: dist/tl_worker.exe  # Path to the generated EXE
       
-      - name: Upload ke_server
-        uses: actions/upload-artifact@v4
-        with:
-          name: ke_server_exe
-          path: dist/ke_server.exe
+      #- name: Upload ke_server
+      #  uses: actions/upload-artifact@v4
+      #  with:
+      #    name: ke_server_exe
+      #    path: dist/ke_server.exe
