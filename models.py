@@ -42,7 +42,15 @@ class ProblematicVideo(BaseModel):
     vid = CharField(unique=True)
     created_on = DateTimeField(default=datetime.now)
 
+class Config(BaseModel):
+    id = AutoField()
+    browsers = CharField(null=True)
+    profiles = CharField(null=True)
+    sessions = CharField(null=True)
+    working_dir = CharField(null=True)
+
+
 
 # Create tables
 db.connect()
-db.create_tables([Archive, Submission, ProblematicTask, ProblematicVideo])
+db.create_tables([Archive, Submission, ProblematicTask, ProblematicVideo, Config], safe=True)
