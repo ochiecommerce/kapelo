@@ -1,9 +1,9 @@
 selenium
 webdriver-manager
 selenium-stealth
-tkinter
 pyperclip
 flask
 flask-login
 bcrypt
+flask-bcrypt
 
