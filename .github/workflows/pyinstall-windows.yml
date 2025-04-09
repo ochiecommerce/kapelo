@@ -1,5 +1,5 @@
 name: Build Windows EXE with PyInstaller
-on: [push]  # Runs on every push (customize as needed)
+on: [workflow_dispatch]  # Runs on every push (customize as needed)
 
 jobs:
   build:
