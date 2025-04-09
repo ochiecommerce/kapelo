@@ -1,6 +1,6 @@
-import os, re, time
+from random import randint
+import os, re, time, pathlib
 import pyperclip
-from utils import RemoteYouTube
 from workers import YtTasksSurveyer, random_string, YouTube
 
 from selenium.common.exceptions import (
@@ -12,12 +12,13 @@ from selenium.webdriver.common.alert import Alert
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.support import expected_conditions as EC
-from utils import search_file
+from utils import EventService, FileService, search_file, search_remote_file
 
 from ke_client import Client
 import traceback
 
 from models import ProblematicTask
+
 
 class TimebucksWorker(YtTasksSurveyer):
     """
@@ -29,6 +30,7 @@ class TimebucksWorker(YtTasksSurveyer):
         driver: WebDriver = None,
         info_line=print,
         dialog=None,
+        file_service:FileService=None
     ):
         """
         Create a new timebucks worker
@@ -39,19 +41,20 @@ class TimebucksWorker(YtTasksSurveyer):
 
         self.last_task_failed = False
         self.total_tasks: int = 0
-        self.filtered_tasks =False
+        self.filtered_tasks = False
         self.stop_flag: bool = False
         self.info_line = info_line
         self.running = False
         self.searching = False
         self.mode = ""
+        self.passive = False
         self.wait_time = 30
         self.dialog = dialog
         self.last_campaign_start = 0
         self.current_campaign_id = None
-        self.kec = Client()
-        self.kec.start()
-        os.makedirs('screenshots', exist_ok=True)
+        self.event_service = EventService()
+        self.file_service = file_service
+        os.makedirs("screenshots", exist_ok=True)
         self.set_locators(
             start_campaign=(By.XPATH, '//*[@id="send"]'),
             file_input=(
@@ -61,7 +64,7 @@ class TimebucksWorker(YtTasksSurveyer):
             thumbnail_image=(By.XPATH, "/html/body/img"),
             back_to_tasks=(
                 By.CSS_SELECTOR,
-                ".btn-green .btnBuyTasksBack",
+                ".btn-green.btnBuyTasksBack",
             ),
             see_video_id=(
                 By.XPATH,
@@ -80,15 +83,15 @@ class TimebucksWorker(YtTasksSurveyer):
             self.handle_task()
         if self.filtered_tasks:
             self.driver.execute_script(
-                '''
+                """
 document.getElementById("buyTasksCampaignTitle").value = "Watch";
 document.querySelector(".btnFilterTasks").click()
-                '''
+                """
             )
-            
+
         else:
             self.driver.execute_script(
-                '''
+                """
 document.querySelectorAll('.multiselect')[1].click();
 let items = document.querySelectorAll('.dropdown-item');
 items[0].click()
@@ -97,15 +100,16 @@ items.forEach(item => {
 })
 document.getElementById("buyTasksCampaignTitle").value = "Watch";
 document.querySelector(".btnFilterTasks").click()
-                '''
+                """
             )
             self.filtered_tasks = True
+
     def next(self):
         self.filter_tasks()
         time.sleep(3)
         tbody = self.driver.find_element(By.CLASS_NAME, "buyTasksBody")
         campaign_rows = tbody.get_property("children")
-        if len(campaign_rows)<1:
+        if len(campaign_rows) < 1:
             self.driver.execute_script("window.scrollBy(0, -window.innerHeight);")
             time.sleep(3)
             self.driver.execute_script("window.scrollBy(0, window.innerHeight);")
@@ -113,15 +117,22 @@ document.querySelector(".btnFilterTasks").click()
         for campaign_row in campaign_rows:
             self.scroll_to(campaign_row)
             instructions = campaign_row.get_property("innerText")
-            class_name:str = campaign_row.get_attribute('class')
-            campaign_id = ''.join([x for x in class_name if x.isdigit()])
-            if re.search('Watch 1 mins of video',instructions):
-                
+            class_name: str = campaign_row.get_attribute("class")
+            campaign_id = "".join([x for x in class_name if x.isdigit()])
+            if re.search("Watch 1 mins of video", instructions):
+
                 # check if the task is problematic
-                problematic_task = ProblematicTask.get_or_none(ProblematicTask.task_id == campaign_id)
+                problematic_task = ProblematicTask.get_or_none(
+                    ProblematicTask.task_id == campaign_id
+                )
                 if problematic_task:
                     continue
                 self.view_task2(campaign_id)
+
+                if self.passive and not self.passively_doable():
+                    self.back_to_tasks()
+                    continue
+
                 self.start_campaign()
                 self.current_campaign_id = campaign_id
                 if not self.handle_task():
@@ -130,12 +141,31 @@ document.querySelector(".btnFilterTasks").click()
                     self.hide_campaign(campaign_id)
                     return 0
                 return 1
-                
+
             else:
                 self.hide_campaign(campaign_id)
         return 0
-            
+
+    def back_to_tasks(self):
+        # back = self.wait_for("back_to_tasks")
+        # back.click()
+        self.driver.execute_script(
+            """document.querySelector(".btn-green.btnBuyTasksBack").click()"""
+        )
         
+
+
+    def passively_doable(self):
+        instructions_element = self.wait_for("p.instructions")
+        instructions = instructions_element.get_property("innerText")
+        urls: list[str] = YouTube.get_urls(instructions)
+        vid: str = YouTube.video_id(urls[-1])
+        preview = search_file("screenshots", vid)
+
+        if preview:
+            print("found a preview", preview)
+            return preview
+        return False
 
     def view_task2(self, campId):
         """
@@ -172,113 +202,131 @@ document.querySelector(".btnFilterTasks").click()
         self.next()
         return False
 
-    def submit_task(self, file_path:str):
+    def submit_task(self, file_path: str):
         """
         Submit task
         """
-        done = False
-        
-        vid = file_path.split('/')[1]
+
+        vid = file_path.split("/")[1]
         pyperclip.copy(vid)
         delete_target = vid
-        
+
         time_taken = time.time() - self.last_campaign_start
         if time_taken < 61:
             time.sleep(61 - time_taken)
 
-        
-        self.kec.wait_for('n')
-        print('task submitted')
-        os.remove('screenshots/'+delete_target)
+        self.event_service.wait_confirmation()
+        print("task submitted")
+        os.remove("screenshots/" + delete_target)
         return True
-        
-        # try:
-            
-        #     addToFavTask: EC.WebElement = self._driver.find_element(
-        #         By.ID, "addToFavTask"
-        #     )
-        #     self.random_click(addToFavTask)
-        #     print("added to fav tasks")
-        # except Exception:
-        #     pass
-        # try:
-        #     print("interacting with file input")
-        #     file_input: EC.WebElement = self.wait.until(
-        #         EC.presence_of_element_located(self.locators["file_input"])
-        #     )
-        #     def autoclick(x,y):
-        #         x1,y1=pyautogui.position()
-        #         func = interpolate_points((x1,y1),(randint(1,x),randint(1,y)),(x,y))
-        #         steps=int((x-x1)/5)
-        #         x_vals = range(x1,x,steps)
-        #         y_vals = [func(i) for i in x_vals]
-        #         total_time =2
-        #         for xn, yn in zip(x_vals,y_vals):
-        #             pyautogui.moveTo(int(xn),int(yn),duration=total_time/len(x_vals))
-        #         pyautogui.click()
 
-        #     def internal_upload():
-        #         current_dir = pathlib.Path(__file__).parent.absolute()
-        #         abs_path = os.sep.join((str(current_dir),file_path))
-        #         file_input.send_keys(abs_path)
-                
-                
+    def keyboard_submit(self, file_path: str):
+        """
+        Submit task using keyboard shortcuts
+        """
+        vid = file_path.split("/")[1]
+        pyperclip.copy(vid)
 
-        #     def external_upload():
-        #         file_name = file_path.split('/')[1]
-        #         pyperclip.copy(file_name)
-        #         self.scroll_to(file_input)
-        #         autoclick(440,490)
-        #         time.sleep(5)
-            
-        #         pyautogui.write('pasting')
-        #         pyautogui.hotkey('ctrl','a')
-        #         pyautogui.hotkey('ctrl','v')
-        #         pyautogui.press('enter')
-        #         pyautogui.press('enter')
+        def press_key(key: str):
+            self.kec.press(key)
+            time.sleep(randint(50, 200) / 1000)
+            self.kec.release(key)
+            time.sleep(randint(1, 3))
 
-        #     internal_upload()
-        #     time.sleep(5)
-        #     #self.wait.until(EC.visibility_of_element_located(self.locators["image_proof"]))
-        #     os.remove(file_path)
-        #     print('deleted',file_path)
-        #     #submit_task: EC.WebElement = self.wait.until(EC.visibility_of_element_located(self.locators["submit_task"]))
-        #     input('press enter to continue')
-        #     return True
-        #     try:
-        #         def submit():
-        #             pyautogui.scroll(-5)
-        #             time.sleep(1)
-        #             autoclick(450,130)
-                    
-        #             WebDriverWait(self._driver, 15).until(EC.alert_is_present())
-        #             self.driver.switch_to.alert.accept()
-        #             self.total_tasks += 1
-        #             print("task submitted successfully")
-        #             return True
+        press_key("tab")
+        press_key("tab")
+        press_key("tab")
+        press_key("enter")
+        time.sleep(3)
+        press_key("a")
+        self.kec.press("ctrl")
+        time.sleep(0.1)
+        press_key("v")
+        press_key("a")
+        self.kec.release("ctrl")
+        press_key("left")
+        press_key("delete")
+        press_key("enter")
+        time.sleep(3)
+        time_taken = time.time() - self.last_campaign_start
+        if time_taken < 61:
+            time.sleep(61 - time_taken)
 
-        #         for _ in range(3):
-        #             try:
-        #                 if submit():
-        #                     done = True
-        #                     break
+        os.remove("screenshots/" + vid)
+        press_key("tab")
+        press_key("tab")
+        press_key("tab")
+        press_key("enter")
+        return True
 
-        #             except Exception:
-        #                 traceback.print_exc()
-        #                 print("submission failed,retrying...")
+    def automatic_submit(self, file_path: str):
+        done = False
+        try:
 
-        #     except Exception:
-        #         traceback.print_exc()
-        #         print("submission failed,retrying...")
+            addToFavTask: EC.WebElement = self._driver.find_element(
+                By.ID, "addToFavTask"
+            )
+            self.random_click(addToFavTask)
+            print("added to fav tasks")
+        except Exception:
+            pass
+        try:
+            print("interacting with file input")
+            file_input: EC.WebElement = self.wait.until(
+                EC.presence_of_element_located(self.locators["file_input"])
+            )
 
-        # except Exception:
-        #     traceback.print_exc()
-        #     print("task submission failed")
+            def internal_upload():
+                current_dir = pathlib.Path(__file__).parent.absolute()
+                abs_path = os.sep.join((str(current_dir), file_path))
+                file_input.send_keys(abs_path)
 
-        # if not done:
-        #     self.cancel_campaign("task submission failed")
+            internal_upload()
+            time.sleep(5)
+            self.wait.until(
+                EC.visibility_of_element_located(self.locators["image_proof"])
+            )
+            os.remove(file_path)
+            print("deleted", file_path)
+            submit_task: EC.WebElement = self.wait.until(
+                EC.visibility_of_element_located(self.locators["submit_task"])
+            )
+            try:
 
-        # return done
+                def submit():
+                    time_taken = time.time() - self.last_campaign_start
+                    if time_taken < 61:
+                        time.sleep(61 - time_taken)
+                    self.random_click(submit_task)
+
+                    self.wait.until(EC.alert_is_present())
+                    self.driver.switch_to.alert.accept()
+                    self.total_tasks += 1
+                    print("task submitted successfully")
+                    return True
+
+                for _ in range(3):
+                    try:
+                        if submit():
+                            done = True
+                            break
+
+                    except Exception:
+                        traceback.print_exc()
+                        print("submission failed,retrying...")
+
+            except Exception:
+                traceback.print_exc()
+                print("submission failed,retrying...")
+
+        except Exception:
+            traceback.print_exc()
+            print("task submission failed")
+
+        if not done:
+            self.cancel_campaign("task submission failed")
+
+        return done
 
     def hide_campaign(self, campaignId):
         """
@@ -294,9 +342,14 @@ document.querySelector(".btnFilterTasks").click()
             Exception: If an error occurs while attempting to hide the campaign.
         """
         try:
-            hide: EC.WebElement = self.wait.until(EC.presence_of_element_located((
-                By.CSS_SELECTOR, f".campaignRow{campaignId} .hideThisTask"
-            )))
+            wt = self.wait_time
+            self.wait_time /= 2
+            hide: EC.WebElement = self.wait.until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, f".campaignRow{campaignId} .hideThisTask")
+                )
+            )
+            self.wait_time = wt
             self.random_click(hide)
             print("successfully hidden campaign")
             return True
@@ -312,13 +365,11 @@ document.querySelector(".btnFilterTasks").click()
 
         try:
             self._driver.switch_to.window(self.main_window)
-            cancel: EC.WebElement = self.wait.until(
-                EC.visibility_of_element_located(self.locators["cancel_campaign"])
-            )
+            cancel: EC.WebElement = self.wait_for("cancel_campaign")
             self.random_click(cancel)
             Alert(self._driver).accept()
 
-            print("successfully cancelled campaign")
+            print(f"successfully cancelled campaign because {reason}")
             return True
         except (
             StaleElementReferenceException,
@@ -327,7 +378,7 @@ document.querySelector(".btnFilterTasks").click()
         ):
             self.repair()
 
-        except Exception as e:  # pragma: no cover
+        except Exception as e:
             print("could not cancel campaign", str(e))
             traceback.print_exc()
             return False
@@ -338,11 +389,9 @@ document.querySelector(".btnFilterTasks").click()
         """
         print("starting campaign")
         self.last_campaign_start = time.time()
-        
+
         try:
-            start_button: EC.WebElement = self.wait.until(
-                EC.visibility_of_element_located(self.locators["start_campaign"])
-            )
+            start_button: EC.WebElement = self.wait_for("start_campaign")
             self.random_click(start_button)
 
             return True
@@ -367,7 +416,7 @@ document.querySelector(".btnFilterTasks").click()
         print("handling tasks")
         time.sleep(10)
         self.filter_tasks()
-        
+
         tasks: list[dict[str, str]] = []
         try:
             tasks = self.survey()
@@ -376,7 +425,7 @@ document.querySelector(".btnFilterTasks").click()
         if len(tasks) < 1:
             self.driver.execute_script("window.scrollBy(0, window.innerHeight);")
             return self.next()
-        
+
         for id, task in enumerate(tasks):
             if True:
                 print("waiting for full page load")
@@ -384,7 +433,9 @@ document.querySelector(".btnFilterTasks").click()
                 if self.status == "Searching":
 
                     # check if the task is problematic
-                    problematic_task = ProblematicTask.get_or_none(ProblematicTask.task_id == task["Id"])
+                    problematic_task = ProblematicTask.get_or_none(
+                        ProblematicTask.task_id == task["Id"]
+                    )
                     if problematic_task:
                         print(f"Task {task['Id']} is problematic, skipping")
                         continue
@@ -393,7 +444,7 @@ document.querySelector(".btnFilterTasks").click()
                             done = False
                             if self.start_campaign():
                                 print("task started")
-                                self.current_campaign_id = task['Id']
+                                self.current_campaign_id = task["Id"]
                                 done: str | bool = self.do_task(task["Instructions"])
 
                             if done:
@@ -426,7 +477,7 @@ document.querySelector(".btnFilterTasks").click()
         # get the textContent of the element
         instructions: str | None = p_instructions.get_attribute("textContent")
         done: str | bool = self.do_task(instructions)
-        print('task done')
+        print("task done")
         if done:
             return self.submit_task(done)
 
@@ -438,17 +489,15 @@ document.querySelector(".btnFilterTasks").click()
         while True:
             if self.status == "Searching":
                 try:
-                    #if self.handle_tasks()==0:
+                    # if self.handle_tasks()==0:
                     #    return
                     self.next()
                 except:
                     traceback.print_exc()
                     return
-                
 
             elif self.status == "Working":
                 self.handle_task()
-
 
     def work(self) -> None:
         """
@@ -481,17 +530,17 @@ class LocalTBWorker(TimebucksWorker):
         print("opening new tab for watching video")
         urls: list[str] = YouTube.get_urls(task)
         vid: str = YouTube.video_id(urls[-1])
-        preview = search_file('screenshots',vid)
-        
+        preview = search_file("screenshots", vid)
+
         if preview:
-            print('found a preview',preview)
+            print("found a preview", preview)
             return preview
         new_tab: str = self.open_new_tab()
         try:
             self.driver.switch_to.window(new_tab)
             yt_slave = YouTube(self.driver)
 
-            if result:=yt_slave.do_task(task):
+            if result := yt_slave.do_task(task):
                 self.close_tab(new_tab)
                 return result
 
@@ -516,19 +565,19 @@ class RemoteTBWorker(TimebucksWorker):
             Handles a single task of watching a YouTube video. Takes a task description as input and returns the path to the screenshot taken during the task. If an error occurs, it prints an error message, cancels the campaign, and raises the exception.
     """
 
+    def __init__(self, driver=None, info_line=print, dialog=None, yt_server=None):
+        super().__init__(driver, info_line, dialog)
+        self.yt_server = yt_server
+
     def do_task(self, task: str):
         """
         Handles a single task of watching youtube video
         """
 
-        try:
-            destination: str = "screenshots/" + random_string() + ".png"
-            yt_slave = RemoteYouTube()
-            yt_slave.screenshot = destination
-            if yt_slave.do_task(task):
-                return destination
+        urls: list[str] = YouTube.get_urls(task)
+        vid: str = YouTube.video_id(urls[-1])
+        preview = search_remote_file(self.yt_server, vid)
 
-        except Exception as e:
-            print("error occured in watching video", str(e))
-            self.cancel_campaign("error occured in watching video")
-            raise e
+        if preview:
+            print("found a preview", preview)
+            return preview
