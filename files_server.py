@@ -36,8 +36,6 @@ class File(BaseModel):
     user = ForeignKeyField(User, backref='files')
 
 
-
-    
 def create_tables():
     with db:
         db.create_tables([User, File,], safe=True)
@@ -121,7 +119,7 @@ def search():
         return 'Folder and prefix are required', 400
 
     files_found = search_files(folder, prefix)
-    submitted_files = File.select().where(File.file_name.startswith(prefix),File.username==current_user.username)
+    submitted_files = File.select().where(File.file_name.startswith(prefix),File.user==current_user.username)
     submitted_files = [file.file_name for file in submitted_files]
 
     file_path = None
@@ -143,7 +141,8 @@ def download():
         return 'file name required', 400
     
     user = User.get(User.username==current_user.username)
-    
+    if File.select().where(File.file_name==file_name,File.user==user.id).exists():
+        return 'file already downloaded', 404
     new_file = File(file_name=file_name, user=user.id)
     new_file.save()
-    return send_file('screensshots/'+file_name)
+    return send_file('screenshots/'+file_name)

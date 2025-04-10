@@ -40,7 +40,7 @@ class SimpleWorker:
 
         if home_page:
             driver.get(home_page)
-        
+
         self.home_page = home_page
 
         self.main_window = driver.current_window_handle
@@ -55,6 +55,16 @@ class SimpleWorker:
     @property
     def wait(self) -> WebDriverWait[WebDriver]:
         return WebDriverWait(self._driver, self.wait_time)
+
+    def wait_for(self, locator_name):
+        locator = self.locators.get(locator_name)
+        if locator:
+            return self.wait.until(
+                EC.visibility_of_element_located(locator)
+            )
+        return self.wait.until(
+            EC.visibility_of_element_located((By.CSS_SELECTOR, locator_name))
+        )
 
     def check(self, element_id) -> bool:
         try:
@@ -90,15 +100,17 @@ class SimpleWorker:
         self.scroll_to(element)
         actions = ActionChains(self.driver)
         try:
-            #self.driver.execute_script("arguments[0].click();", element)
+            # self.driver.execute_script("arguments[0].click();", element)
             actions.move_to_element(element).click().perform()
 
         except StaleElementReferenceException:
             self.repair()
 
-    def scroll_to(self, element:WebElement):
+    def scroll_to(self, element: WebElement):
         """Scroll to a web element"""
-        self.driver.execute_script("arguments[0].scrollIntoView({behavior:'smooth',block:'center'});", element)
+        self.driver.execute_script(
+            "arguments[0].scrollIntoView({behavior:'smooth',block:'center'});", element
+        )
         time.sleep(randint(1, self.max_wait))
 
     def initialize(self):
@@ -135,7 +147,6 @@ class SimpleWorker:
             return "Searching"
         elif "Time Elapsed" in self.driver.title:
             return "Working"
-
 
 
 class Worker(SimpleWorker, SerializableMixin):
@@ -333,19 +344,22 @@ class VideoThumbnail(Worker):
             Returns:
                 bool: True if the video is available, False otherwise.
         """
-        available=False
+        available = False
         try:
             img: WebElement = self.driver.find_element(By.TAG_NAME, "img")
             available: bool = int(img.get_attribute("naturalWidth")) > 200
-            
+
         except:
             pass
 
         finally:
             self.close_tab(self.thumbnail_tab)
             return available
-        
+
+
 from models import ProblematicVideo
+
+
 class YouTube(Worker):
     def __init__(self, driver, playback=2, name="YouTube bot"):
         super().__init__(driver=driver, name=name)
@@ -355,7 +369,7 @@ class YouTube(Worker):
         self.driver.set_script_timeout(30)
         self.driver.set_page_load_timeout(30)
         self.set_locators(skip_ad=(By.CLASS_NAME, "ytp-skip-ad-button"))
-        self.screenshots_folder = 'screenshots'
+        self.screenshots_folder = "screenshots"
 
     def skip_ad(self):
         """
@@ -438,11 +452,7 @@ step()
         self.driver.switch_to.new_window("tab")
         self.driver.get(absolute_link)
 
-    def control(
-        self,
-        duration=60,
-        n_screenshots=1
-    ):
+    def control(self, duration=60, n_screenshots=1):
         """
         1.  wait for a video to play for the given duration
         2.  pause the video
@@ -455,16 +465,16 @@ step()
         try:
             current_time = 0
             self.set_playback(self.playback)
-            video = self.driver.find_element(By.CSS_SELECTOR,'video')
-            video_duration = video.get_property('duration')
-            
-            if video_duration<duration:
-                duration = video_duration-2
-                
+            video = self.driver.find_element(By.CSS_SELECTOR, "video")
+            video_duration = video.get_property("duration")
+
+            if video_duration < duration:
+                duration = video_duration - 2
+
             while current_time < duration:
                 time.sleep(9)
-                current_time = video.get_property('currentTime')
-                if current_time==0:
+                current_time = video.get_property("currentTime")
+                if current_time == 0:
                     new_problematic = ProblematicVideo(vid=self.current_vid)
                     new_problematic.save()
                     return False
@@ -472,22 +482,26 @@ step()
             video_player: WebElement = self._driver.find_element(
                 By.CSS_SELECTOR, "div.html5-video-player"
             )
-            
 
             if self.screenshot:
                 for i in range(n_screenshots):
                     # Pause the video (simulate pressing the spacebar)
                     video_player.send_keys(" ")
                     time.sleep(1)
-                    self._driver.save_screenshot(self.screenshots_folder+os.sep+self.screenshot+f"_{random_string()}.png")
+                    self._driver.save_screenshot(
+                        self.screenshots_folder
+                        + os.sep
+                        + self.screenshot
+                        + f"_{random_string()}.png"
+                    )
                     video_player.send_keys(" ")
                     time.sleep(1)
-                    x= video.get_property('currentTime')
-                    y=video.get_property('duration')
-                    remaining = y-x
-                    if remaining <2:
+                    x = video.get_property("currentTime")
+                    y = video.get_property("duration")
+                    remaining = y - x
+                    if remaining < 2:
                         break
-            return search_file(self.screenshots_folder,self.screenshot)
+            return search_file(self.screenshots_folder, self.screenshot)
         except Exception:
             traceback.print_exc()
             return False
@@ -513,9 +527,9 @@ step()
         """
         urls: list[str] = YouTube.get_urls(instructions)
         print("urls", urls)
-        
+
         vid: str = YouTube.video_id(urls[-1])
-        
+
         self.screenshot = vid
 
         if len(urls) == 2:
@@ -525,13 +539,11 @@ step()
                 print("Thumbnail not available")
                 return False
 
-            
             problematic = ProblematicVideo.select().where(ProblematicVideo.vid == vid)
             if problematic:
                 print(f"Video {vid} is problematic")
                 return False
-            
-            
+
             self.current_vid = vid
             self.driver.get(urls[0])
 
@@ -640,9 +652,9 @@ class TrArray:
                 new.append(tr)
 
         return TrArray(new)
-    
-    def sort_by(self,column):
-        return TrArray(sorted(self.trArray,key=lambda x:x[column],reverse=True))
+
+    def sort_by(self, column):
+        return TrArray(sorted(self.trArray, key=lambda x: x[column], reverse=True))
 
 
 class YtTasksSurveyer(Worker):
@@ -703,9 +715,9 @@ class YtTasksSurveyer(Worker):
         while "Earn" not in self.driver.title:
             print("Earn  page yet to be loaded")
             time.sleep(5)
-            if self.status=='Working':
-                return  []
-            
+            if self.status == "Working":
+                return []
+
         trA = self.get_tr_data()
         yt_tasks: TrArray = (
             TrArray(trA).filter("Actions", "22").filter("ApprovalRateNumeric", 100)
@@ -718,7 +730,7 @@ class YtTasksSurveyer(Worker):
         )
         tr_clean: list[dict[str, str]] = grp1.trArray + grp2.trArray
         tra = TrArray(tr_clean)
-        tra=tra.sort_by('Bid')
-        print(f'found {len(tr_clean)} tasks')
+        tra = tra.sort_by("Bid")
+        print(f"found {len(tr_clean)} tasks")
         json.dump(tr_clean, open("tr_clean.json", "w"))
         return tra.trArray

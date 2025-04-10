@@ -12,9 +12,8 @@ from selenium.webdriver.common.alert import Alert
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.support import expected_conditions as EC
-from utils import EventService, FileService, search_file, search_remote_file
+from utils import EventService, FileService, search_file
 
-from ke_client import Client
 import traceback
 
 from models import ProblematicTask
@@ -28,8 +27,6 @@ class TimebucksWorker(YtTasksSurveyer):
     def __init__(
         self,
         driver: WebDriver = None,
-        info_line=print,
-        dialog=None,
         file_service:FileService=None
     ):
         """
@@ -42,19 +39,12 @@ class TimebucksWorker(YtTasksSurveyer):
         self.last_task_failed = False
         self.total_tasks: int = 0
         self.filtered_tasks = False
-        self.stop_flag: bool = False
-        self.info_line = info_line
-        self.running = False
-        self.searching = False
-        self.mode = ""
         self.passive = False
         self.wait_time = 30
-        self.dialog = dialog
         self.last_campaign_start = 0
         self.current_campaign_id = None
         self.event_service = EventService()
         self.file_service = file_service
-        os.makedirs("screenshots", exist_ok=True)
         self.set_locators(
             start_campaign=(By.XPATH, '//*[@id="send"]'),
             file_input=(
@@ -160,7 +150,7 @@ document.querySelector(".btnFilterTasks").click()
         instructions = instructions_element.get_property("innerText")
         urls: list[str] = YouTube.get_urls(instructions)
         vid: str = YouTube.video_id(urls[-1])
-        preview = search_file("screenshots", vid)
+        preview = self.file_service.get_file(vid)
 
         if preview:
             print("found a preview", preview)
@@ -207,7 +197,7 @@ document.querySelector(".btnFilterTasks").click()
         Submit task
         """
 
-        vid = file_path.split("/")[1]
+        vid = file_path
         pyperclip.copy(vid)
         delete_target = vid
 
@@ -217,7 +207,7 @@ document.querySelector(".btnFilterTasks").click()
 
         self.event_service.wait_confirmation()
         print("task submitted")
-        os.remove("screenshots/" + delete_target)
+        os.remove("submissions/" + delete_target)
         return True
 
     def keyboard_submit(self, file_path: str):
@@ -403,12 +393,7 @@ document.querySelector(".btnFilterTasks").click()
             print("Campaign not started")
             return False
 
-    def do_task(self, task: str) -> str | bool:  # pragma: no cover
-        """
-        Handles a single task of watching youtube video
-        """
-        raise NotImplementedError("This method must be implemented by a subclass")
-
+            
     def handle_tasks(self) -> int:
         """
         Opens the tasks tab to handle the tasks that involve watching youtube videos
@@ -485,7 +470,7 @@ document.querySelector(".btnFilterTasks").click()
             self.cancel_campaign("task failed")
             return False
 
-    def _work(self) -> None:
+    def work(self) -> None:
         while True:
             if self.status == "Searching":
                 try:
@@ -499,29 +484,6 @@ document.querySelector(".btnFilterTasks").click()
             elif self.status == "Working":
                 self.handle_task()
 
-    def work(self) -> None:
-        """
-        Start the work thread of the worker
-        """
-        self._work()
-
-    def stop(self) -> None:
-        """
-        Stops the worker by setting the running flag to False and waiting for the work thread to terminate
-        """
-        if self.running:
-            self.running = False
-            self.thread.join()
-            print("successfully stopped worker")
-
-
-class LocalTBWorker(TimebucksWorker):
-    """
-    LocalTBWorker is a subclass of TimebucksWorker that handles tasks related to watching YouTube videos localy.
-        Methods:
-            do_task(task: str) -> str | None:
-                Handles a single task of watching a YouTube video. Opens a new tab, takes a screenshot, and closes the tab after the task is completed. Returns the path to the screenshot if successful, None if the task fails, and False if an error occurs.
-    """
 
     def do_task(self, task: str) -> str | None:
         """
@@ -530,19 +492,19 @@ class LocalTBWorker(TimebucksWorker):
         print("opening new tab for watching video")
         urls: list[str] = YouTube.get_urls(task)
         vid: str = YouTube.video_id(urls[-1])
-        preview = search_file("screenshots", vid)
+        preview = self.file_service.get_file(vid)
 
         if preview:
             print("found a preview", preview)
-            return preview
+            return self.file_service.download(preview)
         new_tab: str = self.open_new_tab()
         try:
             self.driver.switch_to.window(new_tab)
             yt_slave = YouTube(self.driver)
 
-            if result := yt_slave.do_task(task):
+            if yt_slave.do_task(task):
                 self.close_tab(new_tab)
-                return result
+                return self.file_service.download(vid)
 
             else:
                 print("closing tab after error occured in watching video")
@@ -555,29 +517,3 @@ class LocalTBWorker(TimebucksWorker):
             self.close_tab(new_tab)
             self.cancel_campaign("error occured in watching video")
             return False
-
-
-class RemoteTBWorker(TimebucksWorker):
-    """
-    RemoteTBWorker is a subclass of TimebucksWorker that handles tasks related to watching YouTube videos remotely.
-    Methods:
-        do_task(task: str):
-            Handles a single task of watching a YouTube video. Takes a task description as input and returns the path to the screenshot taken during the task. If an error occurs, it prints an error message, cancels the campaign, and raises the exception.
-    """
-
-    def __init__(self, driver=None, info_line=print, dialog=None, yt_server=None):
-        super().__init__(driver, info_line, dialog)
-        self.yt_server = yt_server
-
-    def do_task(self, task: str):
-        """
-        Handles a single task of watching youtube video
-        """
-
-        urls: list[str] = YouTube.get_urls(task)
-        vid: str = YouTube.video_id(urls[-1])
-        preview = search_remote_file(self.yt_server, vid)
-
-        if preview:
-            print("found a preview", preview)
-            return preview

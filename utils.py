@@ -1,7 +1,6 @@
 import os, re, requests, tkinter as tk
 from threading import Thread
 from tkinter import messagebox
-from bs4 import BeautifulSoup
 from ke_client import Client
 from time import time
 
@@ -79,7 +78,6 @@ def video_id(url):
     return vid
 
 
-
 def search_file(folder, prefix):
     """search for a file whose name begins with a given string"""
     for root, dirs, files in os.walk(folder):
@@ -98,20 +96,6 @@ def search_files(folder, prefix):
     
     return files_found
 
-
-def search_remote_file(server_link, prefix):
-    req = requests.get(server_link, timeout=60)
-    bs = BeautifulSoup(req.content, "html.parser")
-    links: list[str] = [a.get("href") for a in bs.find_all("a")]
-
-    submitted_files = SubmittedFile.select()
-    for link in links:
-        if link.startswith(prefix):
-            if submitted_files.where(SubmittedFile.name == link).exists():
-                continue
-            submitted_file = SubmittedFile(name=link)
-            submitted_file.save()
-            return server_link + link
         
 def confirm(title='Confirmation',message='Press ok to continue'):
     root = tk.Tk()
@@ -158,8 +142,9 @@ class FileService:
         response = self.session.get(self.server+'/download', params={'file':file_name}, timeout=60)
         if response.ok:
             file_name = str(time())+'.png'
-            file = open(file_name,'wb')
+            file = open('submissions/'+file_name,'wb')
             file.write(response.content)
+            return file_name
 
 
 def serve_screenshots():
