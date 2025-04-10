@@ -1,9 +1,8 @@
 selenium
 webdriver-manager
 selenium-stealth
-pyperclip
+peewee
 flask
 flask-login
 bcrypt
 flask-bcrypt
-

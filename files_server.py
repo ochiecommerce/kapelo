@@ -9,7 +9,7 @@ from peewee import (
 
 from flask_login import UserMixin, login_user, logout_user, current_user, login_required
 from flask_bcrypt import Bcrypt
-from utils import search_file, search_files
+from utils import search_files
 bcrypt = Bcrypt()
 db = SqliteDatabase("tbx-users-db.sqlite3")
 
@@ -32,7 +32,7 @@ class User(BaseModel, UserMixin):
         return str(self.id)
     
 class File(BaseModel):
-    file_name = CharField(max_length=256, unique=True)
+    file_name = CharField(max_length=256,)
     user = ForeignKeyField(User, backref='files')
 
 
@@ -119,7 +119,8 @@ def search():
         return 'Folder and prefix are required', 400
 
     files_found = search_files(folder, prefix)
-    submitted_files = File.select().where(File.file_name.startswith(prefix),File.user==current_user.username)
+    user = User.get(User.username==current_user.username)
+    submitted_files = File.select().where(File.file_name.startswith(prefix),File.user==user.id)
     submitted_files = [file.file_name for file in submitted_files]
 
     file_path = None

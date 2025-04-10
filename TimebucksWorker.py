@@ -1,6 +1,5 @@
 from random import randint
 import os, re, time, pathlib
-import pyperclip
 from workers import YtTasksSurveyer, random_string, YouTube
 
 from selenium.common.exceptions import (
@@ -198,7 +197,6 @@ document.querySelector(".btnFilterTasks").click()
         """
 
         vid = file_path
-        pyperclip.copy(vid)
         delete_target = vid
 
         time_taken = time.time() - self.last_campaign_start
@@ -504,7 +502,8 @@ document.querySelector(".btnFilterTasks").click()
 
             if yt_slave.do_task(task):
                 self.close_tab(new_tab)
-                return self.file_service.download(vid)
+                file = self.file_service.get_file(vid)
+                return self.file_service.download(file)
 
             else:
                 print("closing tab after error occured in watching video")
