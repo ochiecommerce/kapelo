@@ -22,7 +22,7 @@ jobs:
 
       - name: Install build dependencies 
         run: |
-          pip install pyinstaller, cython
+          pip install pyinstaller cython
 
       # 4. Build Cython extensions
       - name: Build Cython extensions
