@@ -24,6 +24,11 @@ jobs:
         run: |
           pip install pyinstaller, cython
 
+      # 4. Build Cython extensions
+      - name: Build Cython extensions
+        run: |
+          python setup.py build_ext --inplace
+
       # 4. Run PyInstaller
       - name: Build tl_worker EXE
         run: |
@@ -37,10 +42,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: autotb_exe
-          path: dist/tl_worker.exe  # Path to the generated EXE
+          path: dist/yt-worker.exe  # Path to the generated EXE
       
-      #- name: Upload ke_server
-      #  uses: actions/upload-artifact@v4
-      #  with:
-      #    name: ke_server_exe
-      #    path: dist/ke_server.exe
+      - name: Upload ke_server
+        uses: actions/upload-artifact@v4
+        with:
+          name: ke-server_exe
+          path: dist/ke-server.exe
